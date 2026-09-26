@@ -1,0 +1,26 @@
+<!-- Point-to-point goal planner with A* on VDB map -->
+<launch>
+
+  <arg name="sim" default="true" />
+  <arg name="rviz" default="true" />
+
+  <arg name="enable_frontier_cluster" default="false" />
+  <set_parameter name="use_sim_time" value="true" if="$(var sim)" />
+
+  <node pkg="rviz2" exec="rviz2"
+      args="-d $(find-pkg-share ffa_planner)/launch/robot_launch_gazebo/ffa_gazebo.rviz --ros-args --log-level INFO"
+      output="screen" respawn="true" respawn_delay="1" if="$(var rviz)" />
+  
+  <!-- Static TFs -->
+  <include file="$(find-pkg-share ffa_planner)/launch/robot_launch_gazebo/gz_static_transforms.launch.xml" />
+
+  <!-- Local -->
+  <include file="$(find-pkg-share ffa_planner)/launch/robot_launch_gazebo/gz_local_launch.xml" />
+
+  <!-- Global -->
+  <node pkg="ffa_planner" exec="ffa_planner_node" name="ffa_planner_node" output="screen" emulate_tty="true">
+    <param from="$(find-pkg-share ffa_planner)/config/fov_gazebo_config.yaml" />
+    <param name="enable_frontier_cluster" value="$(var enable_frontier_cluster)" />
+  </node>
+
+</launch>

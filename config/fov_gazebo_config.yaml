@@ -1,0 +1,186 @@
+# SCOPE / FFA planner config (ffa_planner_node) -- loaded by ffa_gazebo_robot_launch.xml.
+# Shared env params (VDBMap, safe_robot_radius, frames, topics) live here.
+/**:
+  ros__parameters:
+    # VDB Map
+    robot_frame_id: "base_link"
+    lidar_frame_id: "ouster"
+    world_frame_id: "world"
+
+    pcl_topic: "/robot_1/sensors/ouster/point_cloud"
+    data_set: "config"
+
+    l_free:  -0.13
+    l_occu:   1.01
+    l_min:   -2.0
+    l_max:    3.5
+    l_thresh: 0.0
+
+    vox_size: 0.1
+    start_range: 0.3
+    sensor_range: 5.0
+
+    safe_robot_r: 0.5
+    safe_robot_radius_xy: 0.5
+    safe_robot_height_z: 0.3
+
+    enable_dist_map: false
+    enable_frontier_map: true
+    enable_frontier_cluster: false
+    enable_inflated_map: true
+    # Occ-shell channel (1-voxel dilation of raw occupied voxels) used by the
+    # observe failsafe to flag viewpoints whose line of sight grazes an obstacle
+    # edge. Cheap (27 writes per occ transition). Off = grazing never flagged.
+    enable_occ_shell_map: true
+    occ_shell_radius: 1
+
+    vdbedt_version: 1
+    max_update_dist: 20.0
+    edt_update_duration: 0.5
+    frontier_update_duration: 0.2
+    vis_update_duration: 0.5
+    vis_slice_level: 2.5
+
+    vis_map_minx: -200.0
+    vis_map_miny: -200.0
+    vis_map_minz:   -1.0
+    vis_map_maxx:  200.0
+    vis_map_maxy:  200.0
+    vis_map_maxz:   10.0
+
+    # Planner
+    local_timer_period:  0.25   # seconds (4 Hz monitor loop)
+    cruise_speed:        0.5   # m/s
+    interpolate_step:    0.1   # m (trajectory point spacing)
+    viewpoint_reach_tol: 0.2   # m (arrival threshold)
+
+    # Stitched FOV planning
+    fov_stitch_lookahead_dist: 1.0   # m, how far ahead on guidance to pick target_2
+
+    # Lookahead point (future replan start): samples cached trajectory at
+    #   t_eval = (now - t_published) + lookahead_buffer_time_s
+    # tp_divergence_threshold_m flags tracking_point drift relative to the
+    # cached trajectory's expected-now sample (controller not keeping up).
+    lookahead_buffer_time_s:   0.5   # s
+    tp_divergence_threshold_m: 0.5   # m
+    # false = benchmark-era wall-clock lookahead (reference advances with the
+    # published trajectory's own schedule). true = progress-driven (anchored
+    # to tracker-reported time_from_start; the real-robot open-loop-jump fix).
+    lookahead_progress_driven: false
+
+    # Global A* (optimistic guidance path, event-driven, unlimited search)
+    global_astar_allocate_num:     5000000
+    global_astar_max_search_time:  1.0    # <= 0 means unlimited
+    global_astar_lambda_heu:       1.0
+
+    # Body-to-sensor transform for FOV planning (body frame: x=fwd, y=left, z=up)
+    body_sensor_x:     0.0
+    body_sensor_y:     0.0
+    body_sensor_z:     0.05
+    body_sensor_roll:  0.0
+    body_sensor_pitch: 0.0
+    body_sensor_yaw:   0.0
+
+    # Sensor vertical FOV (radians, relative to optical axis).
+    # +-44.5 deg = the physical sensor's +-45 deg minus a 0.5 deg calibration
+    # margin: the observe A* heuristic descends the FOV deficit, so selected
+    # viewpoints sit ON this cone boundary; with the model equal to the sensor,
+    # a boundary target (44.93 deg, scene3 t02/t04) is certified yet physically
+    # unseeable (beam discretization + aperture-rim grazing) -> deterministic
+    # stare loop. The margin keeps every certified target strictly inside the
+    # real cone.
+    fov_theta_u:  0.76     # upper limit (43.5 deg = physical 45 minus 1.5 calibration margin)
+    fov_theta_d: -0.76     # lower limit (-43.5 deg)
+    fov_min_range: 0.5       # m, conservative min distance to keep the inflated hit box out of the near field
+    fov_range: 4.0         # conservative range for FOV planning (< sensor_range to avoid boundary issues)
+    observe_min_range: 0.5   # m, keep some standoff when selecting observe viewpoints
+    soft_frontier_cost_multiplier: 3.0   # legacy name: multiplier applied to any step whose resulting FOV/observe search label is CONTAMINATED
+
+    # FOV / Observe A* edge-cost shaping toward the search anchor (lookahead for vp1 / vp1 for vp2)
+    anchor_bias_away_weight:    0.1   # global weight on (1 + w * away_alignment), applied on every step (cheap, geometric only)
+    anchor_bias_max_multiplier: 1.1   # cap on the global anchor bias multiplier (1.0 disables)
+
+    # FOV A*
+    fov_astar_allocate_num:     500000
+    fov_astar_max_search_time:  0.1
+    fov_astar_lambda_heu:       2.0
+
+    # Observe A* (occlusion clearing — find viewpoint to observe a single unknown)
+    observe_astar_allocate_num:     500000
+    observe_astar_max_search_time:  0.1
+    observe_astar_lambda_heu:       2.0
+
+    # Observe failsafe: arrived at the observe viewpoint (within reach tol,
+    # yaw settled) but the locked unknown did not resolve. First round of
+    # every observe phase is unaffected; these only shape the retry.
+    observe_dwell_map_updates: 3      # map updates to wait at a geometrically valid real pose
+    observe_arrival_max_ticks: 10     # ticks inside reach tol whose real pose never passes FOV geometry
+    observe_resume_budget: 0.2        # s, extra budget per resumed observe search
+    observe_graze_penalty_vox: 5.0    # connect seed cost (voxels) for candidates whose ray grazes the occ shell
+    observe_graze_skip_vox: 2         # ray voxels next to the target ignored by the grazing test
+
+    # Visibility-cell (anchor polytope) acceptance. shrink_m buys the executed
+    # knot a real position margin and moves validation samples off the
+    # FIRI-tight boundary; sim tracking error is small, so 0.05 here
+    # (real-robot configs inherit the 0.10 code default).
+    visibility_cell_shrink_m: 0.05
+    visibility_cell_max_carve: 8
+    # ROI must not clip the certified-visible band: the STANDARD pitch window
+    # allows |dz| up to ~0.94 m at d_h=2.5 m, and the range annulus spans
+    # 1.27-3.23 m from the target.
+    visibility_cell_roi_xy: 2.0
+    visibility_cell_roi_z: 1.2
+
+    # Connect A* (connect robot to selected observation viewpoint)
+    connect_astar_allocate_num:     500000
+    connect_astar_max_search_time:  0.1
+    connect_astar_lambda_heu:       1.0
+
+    # Debug visualization
+    vis_debug_tree: true
+    vis_fov_debug_tree: true
+    vis_traj_optimizer: true
+
+    # Trajectory optimizer (GCOPTER-style backend on top of searched path)
+    traj_opt.corridor_progress: 1.0
+    traj_opt.corridor_range: 1.5
+    traj_opt.corridor_padding_vox: 5
+    traj_opt.strict_traj: false
+    traj_opt.snapshot.enable: false
+    traj_opt.snapshot.dir: "/tmp/ffa_planner/snapshots"
+
+    traj_opt.time_weight: 100.0
+    traj_opt.jerk_weight: 0.01
+    traj_opt.length_per_piece: 0.5
+    traj_opt.smoothing_eps: 1.0e-2
+    traj_opt.integral_resolution: 32
+    traj_opt.rel_cost_tol: 1.0e-3
+    traj_opt.yaw_smooth_weight: 1.0
+    traj_opt.max_yaw_rate: 1.0
+    traj_opt.penalty_yaw_rate: 1.0e+4
+    traj_opt.init_alloc_speed_ratio: 1.0
+    traj_opt.init_max_acc: 3.0
+    traj_opt.init_time_margin: 1.0
+    traj_opt.stitched_seam_pos_weight: 1.0e+4
+    traj_opt.stitched_seam_yaw_weight: 1.0e+4
+    traj_opt.visibility_overlap_min_radius: 0.05
+    traj_opt.visibility_min_pieces: 2
+
+    traj_opt.max_vel: 1.0
+    traj_opt.max_body_rate: 2.1
+    traj_opt.max_tilt: 1.05
+    traj_opt.min_thrust: 2.0
+    traj_opt.max_thrust: 12.0
+
+    traj_opt.vehicle_mass: 0.61
+    traj_opt.gravity: 9.8
+    traj_opt.horiz_drag: 0.70
+    traj_opt.vert_drag: 0.80
+    traj_opt.paras_drag: 0.01
+    traj_opt.speed_eps: 0.0001
+
+    traj_opt.penalty_pos: 1.0e+6
+    traj_opt.penalty_vel: 1.0e+4
+    traj_opt.penalty_omg: 1.0e+4
+    traj_opt.penalty_tilt: 1.0e+4
+    traj_opt.penalty_thrust: 1.0e+5

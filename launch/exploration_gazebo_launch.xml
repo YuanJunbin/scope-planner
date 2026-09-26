@@ -1,0 +1,21 @@
+<!-- SCOPE + frontier exploration in the rmf_owl Gazebo worlds:
+     the planner (with vdb_edt frontier clustering switched on) plus the
+     exploration manager that feeds it viewpoints. Toggle exploration with
+       ros2 service call /exploration_manager/toggle std_srvs/srv/Trigger -->
+<launch>
+  <arg name="rviz" default="true" />
+  <arg name="auto_start" default="false" />
+  <arg name="bounds_min" default="[-1.0e9, -1.0e9, -1.0e9]" />
+  <arg name="bounds_max" default="[1.0e9, 1.0e9, 1.0e9]" />
+
+  <include file="$(find-pkg-share ffa_planner)/launch/ffa_gazebo_robot_launch.xml">
+    <arg name="rviz" value="$(var rviz)" />
+    <arg name="enable_frontier_cluster" value="true" />
+  </include>
+
+  <node pkg="ffa_planner" exec="exploration_manager.py" name="exploration_manager" output="screen">
+    <param name="auto_start" value="$(var auto_start)" />
+    <param name="bounds_min" value="$(var bounds_min)" />
+    <param name="bounds_max" value="$(var bounds_max)" />
+  </node>
+</launch>

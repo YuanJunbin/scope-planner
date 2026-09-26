@@ -1,0 +1,8 @@
+# colcon
+build/
+install/
+log/
+
+# planner debug dumps
+log_debug/
+**/__pycache__/
